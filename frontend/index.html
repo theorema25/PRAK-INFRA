@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Event Management</title>
+  <meta name="description" content="Login ke sistem manajemen event">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <h1>Selamat Datang</h1>
+      <p class="subtitle">Masuk ke akun Anda</p>
+
+      <form id="loginForm" novalidate>
+        <div class="form-group">
+          <label for="identifier">Email atau Username</label>
+          <input type="text" id="identifier" placeholder="Masukkan email atau username" required>
+          <div class="field-error" id="identifierError"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Masukkan password" required>
+          <div class="field-error" id="passwordError"></div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="loginBtn">
+          <span id="loginText">Masuk</span>
+        </button>
+      </form>
+
+      <div class="auth-link">
+        Belum punya akun? <a href="register.html">Daftar disini</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    if (getToken()) window.location.href = 'events.html';
+
+    const form = document.getElementById('loginForm');
+    const btn = document.getElementById('loginBtn');
+    const btnText = document.getElementById('loginText');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const identifier = document.getElementById('identifier').value.trim();
+      const password = document.getElementById('password').value;
+
+      document.getElementById('identifierError').textContent = '';
+      document.getElementById('passwordError').textContent = '';
+
+      let valid = true;
+      if (!identifier) { document.getElementById('identifierError').textContent = 'Wajib diisi'; valid = false; }
+      if (!password) { document.getElementById('passwordError').textContent = 'Wajib diisi'; valid = false; }
+      if (!valid) return;
+
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="spinner"></span> Memproses...';
+
+      try {
+        const data = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ identifier, password })
+        });
+        saveAuth(data);
+        localStorage.setItem('username', identifier);
+        showToast('Login berhasil!');
+        setTimeout(() => window.location.href = 'events.html', 600);
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Masuk';
+      }
+    });
+  </script>
+</body>
+</html>

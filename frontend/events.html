@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events - Event Management</title>
+  <meta name="description" content="Manajemen dan pendaftaran event">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="dashboard">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="logo">EventHub</div>
+      <div class="topbar-right">
+        <div class="user-badge">
+          <span id="userDisplay"></span>
+          <span class="role-tag" id="roleTag"></span>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="main-content">
+      <!-- ADMIN VIEW -->
+      <div id="adminView" style="display:none">
+        <div class="table-card">
+          <h2>Management Events</h2>
+
+          <div class="table-toolbar">
+            <div class="search-box">
+              <input type="text" id="searchInput" placeholder="Cari event...">
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn btn-sm btn-excel" onclick="exportExcel()">📊 Excel</button>
+              <button class="btn btn-sm btn-success" onclick="openModal()">+ Tambah Event</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Nama Event</th>
+                  <th>Deskripsi</th>
+                  <th>Kuota</th>
+                  <th>Mulai</th>
+                  <th>Selesai</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="eventTableBody">
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-footer">
+            <div style="display:flex;gap:12px;align-items:center">
+              <button class="btn btn-sm btn-success" onclick="openModal()">+ Add</button>
+              <div class="rows-per-page">
+                <span>Row per page</span>
+                <select id="rowsPerPage" onchange="changePageSize()">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
+            <div class="pagination">
+              <button onclick="goToPage(1)" id="btnFirst">|&lt;</button>
+              <button onclick="goToPage(currentPage-1)" id="btnPrev">&lt;</button>
+              <span class="page-info" id="pageInfo">1 / 1</span>
+              <button onclick="goToPage(currentPage+1)" id="btnNext">&gt;</button>
+              <button onclick="goToPage(totalPages)" id="btnLast">&gt;|</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- USER VIEW -->
+      <div id="userView" style="display:none">
+        <div class="table-card" style="margin-bottom:24px">
+          <h2>Daftar Event</h2>
+          <p style="color:var(--text-secondary);margin-bottom:20px">Pilih event yang ingin Anda ikuti</p>
+          <div class="search-box" style="margin-bottom:20px;max-width:100%">
+            <input type="text" id="userSearchInput" placeholder="Cari event...">
+          </div>
+        </div>
+        <div class="event-grid" id="eventGrid"></div>
+        <div id="userEmpty" class="empty-state" style="display:none">
+          <div class="icon">📭</div>
+          <p>Belum ada event tersedia</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="eventModal" style="display:none" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <h3 id="modalTitle">Tambah Event</h3>
+      <form id="eventForm" novalidate>
+        <input type="hidden" id="editEventId">
+        <div class="form-group">
+          <label for="eventName">Nama Event</label>
+          <input type="text" id="eventName" placeholder="Nama event" required>
+        </div>
+        <div class="form-group">
+          <label for="eventDesc">Deskripsi</label>
+          <textarea id="eventDesc" rows="3" placeholder="Deskripsi event"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="eventQuota">Kuota</label>
+          <input type="number" id="eventQuota" placeholder="Jumlah peserta" min="1" required>
+        </div>
+        <div class="form-group">
+          <label for="eventStart">Tanggal Mulai</label>
+          <input type="datetime-local" id="eventStart">
+        </div>
+        <div class="form-group">
+          <label for="eventEnd">Tanggal Selesai</label>
+          <input type="datetime-local" id="eventEnd">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-sm btn-outline" onclick="closeModal()">Batal</button>
+          <button type="submit" class="btn btn-sm btn-primary" id="modalSubmitBtn" style="width:auto">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CONFIRM DIALOG -->
+  <div class="modal-overlay" id="confirmModal" style="display:none" onclick="if(event.target===this)closeConfirm()">
+    <div class="modal" style="max-width:400px;text-align:center">
+      <h3 id="confirmTitle">Konfirmasi</h3>
+      <p id="confirmMsg" style="color:var(--text-secondary);margin-bottom:24px"></p>
+      <div class="modal-actions" style="justify-content:center">
+        <button class="btn btn-sm btn-outline" onclick="closeConfirm()">Batal</button>
+        <button class="btn btn-sm btn-danger" id="confirmBtn">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    /* ===== STATE ===== */
+    let allEvents = [];
+    let filteredEvents = [];
+    let currentPage = 1;
+    let pageSize = 10;
+    let totalPages = 1;
+    const role = getRole();
+    const isAdmin = role === 'admin' || role === 'superadmin';
+
+    /* ===== INIT ===== */
+    (async function init() {
+      if (!requireAuth()) return;
+
+      document.getElementById('userDisplay').textContent = getUsername() || 'User';
+      const tag = document.getElementById('roleTag');
+      tag.textContent = role;
+      tag.className = 'role-tag role-' + role;
+
+      if (isAdmin) {
+        document.getElementById('adminView').style.display = 'block';
+        document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; filterAndRender(); });
+      } else {
+        document.getElementById('userView').style.display = 'block';
+        document.getElementById('userSearchInput').addEventListener('input', renderUserEvents);
+      }
+
+      await loadEvents();
+    })();
+
+    async function loadEvents() {
+      try {
+        allEvents = await apiFetch('/events/');
+        if (!Array.isArray(allEvents)) allEvents = [];
+        if (isAdmin) filterAndRender();
+        else renderUserEvents();
+      } catch (err) {
+        showToast('Gagal memuat event: ' + err.message, 'error');
+      }
+    }
+
+    /* ===== ADMIN: TABLE ===== */
+    function filterAndRender() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      filteredEvents = allEvents.filter(e =>
+        (e.name || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
+      );
+      totalPages = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('eventTableBody');
+      const start = (currentPage - 1) * pageSize;
+      const page = filteredEvents.slice(start, start + pageSize);
+
+      if (page.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary)">Tidak ada data event</td></tr>';
+      } else {
+        tbody.innerHTML = page.map((ev, i) => `
+          <tr>
+            <td>${start + i + 1}</td>
+            <td>${esc(ev.name)}</td>
+            <td>${esc(ev.description || '-')}</td>
+            <td>${ev.quota ?? '-'}</td>
+            <td>${formatDate(ev.started_at)}</td>
+            <td>${formatDate(ev.ended_at)}</td>
+            <td class="action-btns">
+              <button class="btn btn-sm btn-outline" onclick="openEdit(${ev.id})">Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="confirmDelete(${ev.id},'${esc(ev.name)}')">Delete</button>
+            </td>
+          </tr>`).join('');
+      }
+
+      document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages}`;
+      document.getElementById('btnFirst').disabled = currentPage <= 1;
+      document.getElementById('btnPrev').disabled = currentPage <= 1;
+      document.getElementById('btnNext').disabled = currentPage >= totalPages;
+      document.getElementById('btnLast').disabled = currentPage >= totalPages;
+    }
+
+    function goToPage(p) { currentPage = Math.max(1, Math.min(p, totalPages)); renderTable(); }
+    function changePageSize() { pageSize = parseInt(document.getElementById('rowsPerPage').value); currentPage = 1; filterAndRender(); }
+
+    /* ===== ADMIN: MODAL ===== */
+    function openModal() {
+      document.getElementById('modalTitle').textContent = 'Tambah Event';
+      document.getElementById('eventForm').reset();
+      document.getElementById('editEventId').value = '';
+      document.getElementById('modalSubmitBtn').textContent = 'Simpan';
+      document.getElementById('eventModal').style.display = 'flex';
+    }
+
+    function openEdit(id) {
+      const ev = allEvents.find(e => e.id === id);
+      if (!ev) return;
+      document.getElementById('modalTitle').textContent = 'Edit Event';
+      document.getElementById('editEventId').value = id;
+      document.getElementById('eventName').value = ev.name || '';
+      document.getElementById('eventDesc').value = ev.description || '';
+      document.getElementById('eventQuota').value = ev.quota || '';
+      document.getElementById('eventStart').value = ev.started_at ? ev.started_at.slice(0, 16) : '';
+      document.getElementById('eventEnd').value = ev.ended_at ? ev.ended_at.slice(0, 16) : '';
+      document.getElementById('modalSubmitBtn').textContent = 'Update';
+      document.getElementById('eventModal').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('eventModal').style.display = 'none'; }
+
+    document.getElementById('eventForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('editEventId').value;
+      const body = {
+        name: document.getElementById('eventName').value.trim(),
+        description: document.getElementById('eventDesc').value.trim() || null,
+        quota: parseInt(document.getElementById('eventQuota').value) || 0,
+        started_at: document.getElementById('eventStart').value || null,
+        ended_at: document.getElementById('eventEnd').value || null,
+      };
+
+      if (!body.name) { showToast('Nama event wajib diisi', 'error'); return; }
+      if (!body.quota || body.quota < 1) { showToast('Kuota harus lebih dari 0', 'error'); return; }
+
+      const btn = document.getElementById('modalSubmitBtn');
+      btn.disabled = true;
+
+      try {
+        if (id) {
+          await apiFetch(`/events/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+          showToast('Event berhasil diupdate');
+        } else {
+          await apiFetch('/events/', { method: 'POST', body: JSON.stringify(body) });
+          showToast('Event berhasil ditambahkan');
+        }
+        closeModal();
+        await loadEvents();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    /* ===== ADMIN: DELETE ===== */
+    let deleteId = null;
+    function confirmDelete(id, name) {
+      deleteId = id;
+      document.getElementById('confirmTitle').textContent = 'Hapus Event';
+      document.getElementById('confirmMsg').textContent = `Yakin ingin menghapus "${name}"?`;
+      document.getElementById('confirmBtn').textContent = 'Hapus';
+      document.getElementById('confirmBtn').onclick = doDelete;
+      document.getElementById('confirmModal').style.display = 'flex';
+    }
+    function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; deleteId = null; }
+
+    async function doDelete() {
+      if (!deleteId) return;
+      try {
+        await apiFetch(`/events/${deleteId}`, { method: 'DELETE' });
+        showToast('Event berhasil dihapus');
+        closeConfirm();
+        await loadEvents();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    /* ===== ADMIN: EXCEL ===== */
+    function exportExcel() {
+      const data = filteredEvents.map((e, i) => ({
+        'No': i + 1,
+        'Nama Event': e.name,
+        'Deskripsi': e.description || '-',
+        'Kuota': e.quota,
+        'Mulai': formatDate(e.started_at),
+        'Selesai': formatDate(e.ended_at),
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Events');
+      XLSX.writeFile(wb, 'events.xlsx');
+      showToast('File Excel berhasil didownload');
+    }
+
+    /* ===== USER: EVENT CARDS ===== */
+    function renderUserEvents() {
+      const q = (document.getElementById('userSearchInput')?.value || '').toLowerCase();
+      const filtered = allEvents.filter(e => (e.name || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q));
+      const grid = document.getElementById('eventGrid');
+      const empty = document.getElementById('userEmpty');
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      grid.innerHTML = filtered.map(ev => `
+        <div class="event-card">
+          <h3>${esc(ev.name)}</h3>
+          <div class="event-meta">
+            <span>📝 ${esc(ev.description || 'Tidak ada deskripsi')}</span>
+            <span>👥 Kuota: ${ev.quota ?? '-'} peserta</span>
+            <span>📅 ${formatDate(ev.started_at)} - ${formatDate(ev.ended_at)}</span>
+          </div>
+          <button class="btn btn-sm btn-primary" style="width:100%" onclick="registerEvent(${ev.id},'${esc(ev.name)}')">
+            Daftar Event
+          </button>
+        </div>`).join('');
+    }
+
+    async function registerEvent(eventId, name) {
+      const userId = parseInt(getUserId());
+      if (!userId) { showToast('User ID tidak ditemukan', 'error'); return; }
+
+      document.getElementById('confirmTitle').textContent = 'Daftar Event';
+      document.getElementById('confirmMsg').textContent = `Daftar ke event "${name}"?`;
+      document.getElementById('confirmBtn').textContent = 'Daftar';
+      document.getElementById('confirmBtn').className = 'btn btn-sm btn-success';
+      document.getElementById('confirmBtn').onclick = async () => {
+        try {
+          await apiFetch('/registrations/', { method: 'POST', body: JSON.stringify({ user_id: userId, event_id: eventId }) });
+          showToast(`Berhasil mendaftar ke "${name}"!`);
+          closeConfirm();
+        } catch (err) { showToast(err.message, 'error'); }
+      };
+      document.getElementById('confirmModal').style.display = 'flex';
+    }
+
+    /* ===== UTILS ===== */
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    function logout() {
+      clearAuth();
+      window.location.href = 'index.html';
+    }
+  </script>
+</body>
+</html>
