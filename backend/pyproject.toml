@@ -1,0 +1,27 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "T-Rex2586", email = "theodosiusmahardika9@mail.com"}
+]
+requires-python = ">=3.10"
+
+[tool.poetry]
+package-mode = false
+dependencies = [
+    "fastapi (>=0.115.0)",
+    "uvicorn (>=0.34.0)",
+    "sqlalchemy (>=2.0.48,<3.0.0)",
+    "psycopg2-binary (>=2.9.11,<3.0.0)",
+    "alembic (>=1.18.4,<2.0.0)",
+    "sqlmodel (>=0.0.37,<0.0.38)",
+    "bcrypt (>=4.0.0)",
+    "python-jose[cryptography] (>=3.3.0)",
+    "pydantic[email] (>=2.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
